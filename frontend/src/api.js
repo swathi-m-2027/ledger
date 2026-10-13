@@ -29,6 +29,7 @@ export const api = {
   getTransactions: () => req('/transactions'),
   getCategories: () => req('/transactions/categories'),
   addTransaction: (data) => req('/transactions', 'POST', data),
+  updateTransaction: (id, data) => req(`/transactions/${id}`, 'PUT', data),
   deleteTransaction: (id) => req(`/transactions/${id}`, 'DELETE'),
   getBudgets: () => req('/budgets'),
   setBudget: (categoryId, limit) => req(`/budgets/${categoryId}`, 'PUT', { monthly_limit: limit }),

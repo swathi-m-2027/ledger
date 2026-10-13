@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { api } from './api';
 import { useToast } from './components/Toast';
 import { spentByCategory } from './budgetUtils';
+import { monthKey, todayStr } from './dateUtils';
 import SummaryCards from './components/SummaryCards';
 import CategoryChart from './components/CategoryChart';
 import TrendChart from './components/TrendChart';
@@ -18,6 +19,7 @@ export default function App() {
   const [trendData, setTrendData] = useState([]);
   const [categories, setCategories] = useState([]);
   const [budgets, setBudgets] = useState([]);
+  const [editing, setEditing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [locked, setLocked] = useState(false);
@@ -47,7 +49,7 @@ export default function App() {
       setTransactions(txns.map((t) => ({ ...t, amount: Number(t.amount) })));
       setTrendData(trend);
       setError(null);
-    } catch (err) { setError(err.message); }
+    } catch (err) { if (err.message !== 'Login required') setError(err.message); }
   }, []);
 
   useEffect(() => {
@@ -56,15 +58,17 @@ export default function App() {
         const [cats, buds] = await Promise.all([api.getCategories(), api.getBudgets()]);
         setCategories(cats);
         setBudgets(buds);
-      } catch (err) { setError(err.message); }
+      } catch (err) { if (err.message !== 'Login required') setError(err.message); }
       await sync();
       setLoading(false);
     })();
   }, [sync]);
 
-  // Live budget alert: runs the moment an expense is added
+  const findCategory = (id) => categories.find((c) => String(c.id) === String(id));
+
   const checkBudgetAlert = (data) => {
     if (data.type !== 'expense' || !data.category_id) return;
+    if (monthKey(data.txn_date) !== monthKey(todayStr())) return; // only this month's spending counts
     const budget = budgets.find((b) => String(b.category_id) === String(data.category_id) && b.monthly_limit);
     if (!budget) return;
     const before = spentByCategory(transactions)[budget.category] || 0;
@@ -76,15 +80,38 @@ export default function App() {
 
   const handleAdd = async (data) => {
     const tempId = `temp-${Date.now()}`;
-    const cat = categories.find((c) => String(c.id) === String(data.category_id));
-    setTransactions((p) => [{ id: tempId, description: data.description, amount: data.amount, type: data.type, category: cat ? cat.name : null, txn_date: new Date().toISOString() }, ...p]);
+    const cat = findCategory(data.category_id);
+    setTransactions((p) => [{
+      id: tempId, description: data.description, amount: data.amount, type: data.type,
+      category: cat ? cat.name : null, category_id: cat ? cat.id : null, txn_date: data.txn_date,
+    }, ...p]);
     checkBudgetAlert(data);
     try { await api.addTransaction(data); toast(data.type === 'income' ? 'Income added' : 'Expense added'); sync(); }
     catch (err) { setTransactions((p) => p.filter((t) => t.id !== tempId)); toast(`Could not add: ${err.message}`, 'error'); }
   };
 
+  const handleUpdate = async (id, data) => {
+    const backup = transactions;
+    const cat = findCategory(data.category_id);
+    setTransactions((p) => p.map((t) => (t.id === id ? {
+      ...t, description: data.description, amount: data.amount, type: data.type,
+      category: cat ? cat.name : null, category_id: cat ? cat.id : null, txn_date: data.txn_date,
+    } : t)));
+    setEditing(null);
+    try { await api.updateTransaction(id, data); toast('Transaction updated'); sync(); }
+    catch (err) { setTransactions(backup); toast(`Could not update: ${err.message}`, 'error'); }
+  };
+
+  const handleSubmit = (data) => (editing ? handleUpdate(editing.id, data) : handleAdd(data));
+
+  const handleEdit = (t) => {
+    setEditing(t);
+    document.getElementById('txn-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   const handleDelete = async (id) => {
     const backup = transactions;
+    if (editing && editing.id === id) setEditing(null);
     setTransactions((p) => p.filter((t) => t.id !== id));
     try { await api.deleteTransaction(id); toast('Transaction deleted'); sync(); }
     catch (err) { setTransactions(backup); toast(`Could not delete: ${err.message}`, 'error'); }
@@ -118,7 +145,7 @@ export default function App() {
         </div>
       </header>
       <main className="max-w-6xl mx-auto px-6 py-8 flex flex-col gap-6">
-        {error && <div className="bg-red-50 border border-loss/30 text-loss text-sm rounded-lg px-4 py-3">Couldn't reach the backend: {error}. Make sure the API is running on port 5000.</div>}
+        {error && <div className="bg-red-50 border border-loss/30 text-loss text-sm rounded-lg px-4 py-3">Couldn't reach the server: {error}</div>}
         {loading ? <p className="text-slate-400 text-sm">Loading your data…</p> : (
           <>
             <SummaryCards summary={summary} />
@@ -128,8 +155,8 @@ export default function App() {
               <TrendChart data={trendData} />
             </div>
             <BudgetPanel budgets={budgets} transactions={transactions} onSave={handleSaveBudget} onRemove={handleRemoveBudget} />
-            <TransactionForm categories={categories} onSubmit={handleAdd} />
-            <TransactionList transactions={transactions} onDelete={handleDelete} />
+            <TransactionForm categories={categories} onSubmit={handleSubmit} editing={editing} onCancel={() => setEditing(null)} />
+            <TransactionList transactions={transactions} onDelete={handleDelete} onEdit={handleEdit} />
           </>
         )}
       </main>

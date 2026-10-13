@@ -1,7 +1,9 @@
 require('dotenv').config();
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
 
-// In the cloud we get one DATABASE_URL; on your own PC we use the separate DB_* settings.
+// Return DATE columns as plain "YYYY-MM-DD" text, so a date never shifts by a day between time zones
+types.setTypeParser(1082, (v) => v);
+
 const config = process.env.DATABASE_URL
   ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
   : {
