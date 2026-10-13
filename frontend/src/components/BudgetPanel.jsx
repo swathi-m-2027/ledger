@@ -1,17 +1,18 @@
 import { useMemo, useState } from 'react';
 import { spentByCategory } from '../budgetUtils';
+import { monthLabel } from '../dateUtils';
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Math.round(v));
 const input = 'border border-ledger rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent';
 
-export default function BudgetPanel({ budgets, transactions, onSave, onRemove }) {
-  const spent = useMemo(() => spentByCategory(transactions), [transactions]);
+export default function BudgetPanel({ budgets, transactions, month, onSave, onRemove }) {
+  const spent = useMemo(() => spentByCategory(transactions, month), [transactions, month]);
   const [categoryId, setCategoryId] = useState('');
   const [limit, setLimit] = useState('');
 
   const active = budgets.filter((b) => b.monthly_limit);
   const overCount = active.filter((b) => (spent[b.category] || 0) > b.monthly_limit).length;
-  const monthName = new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' });
+  const monthName = monthLabel(month);
 
   const submit = (e) => {
     e.preventDefault();

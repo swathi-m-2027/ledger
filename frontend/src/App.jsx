@@ -2,13 +2,15 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { api } from './api';
 import { useToast } from './components/Toast';
 import { spentByCategory } from './budgetUtils';
-import { monthKey, todayStr } from './dateUtils';
+import { monthKey, monthLabel, todayStr } from './dateUtils';
 import SummaryCards from './components/SummaryCards';
 import CategoryChart from './components/CategoryChart';
 import TrendChart from './components/TrendChart';
 import BudgetPanel from './components/BudgetPanel';
 import TransactionForm from './components/TransactionForm';
 import TransactionList from './components/TransactionList';
+import CategoryManager from './components/CategoryManager';
+import PeriodBar from './components/PeriodBar';
 import Login from './components/Login';
 
 const inr = (v) => `₹${Math.round(v).toLocaleString('en-IN')}`;
@@ -20,6 +22,7 @@ export default function App() {
   const [categories, setCategories] = useState([]);
   const [budgets, setBudgets] = useState([]);
   const [editing, setEditing] = useState(null);
+  const [period, setPeriod] = useState(monthKey(todayStr())); // 'all' or 'YYYY-MM'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [locked, setLocked] = useState(false);
@@ -30,18 +33,31 @@ export default function App() {
     return () => window.removeEventListener('ledger-unauthorized', lock);
   }, []);
 
+  // Months that have data (plus the current month), newest first
+  const monthOptions = useMemo(() => {
+    const set = new Set(transactions.map((t) => monthKey(t.txn_date)));
+    set.add(monthKey(todayStr()));
+    return [...set].sort().reverse();
+  }, [transactions]);
+
+  // Everything below the period bar follows the chosen month
+  const visibleTxns = useMemo(
+    () => (period === 'all' ? transactions : transactions.filter((t) => monthKey(t.txn_date) === period)),
+    [transactions, period]
+  );
+
   const summary = useMemo(() => {
-    const sum = (type) => transactions.filter((t) => t.type === type).reduce((s, t) => s + Number(t.amount), 0);
+    const sum = (type) => visibleTxns.filter((t) => t.type === type).reduce((s, t) => s + Number(t.amount), 0);
     const income = sum('income'), expense = sum('expense');
     return { income, expense, balance: income - expense };
-  }, [transactions]);
+  }, [visibleTxns]);
 
   const categoryData = useMemo(() => {
     const map = {};
-    transactions.filter((t) => t.type === 'expense' && t.category)
+    visibleTxns.filter((t) => t.type === 'expense' && t.category)
       .forEach((t) => { map[t.category] = (map[t.category] || 0) + Number(t.amount); });
     return Object.entries(map).map(([category, total]) => ({ category, total })).sort((a, b) => b.total - a.total);
-  }, [transactions]);
+  }, [visibleTxns]);
 
   const sync = useCallback(async () => {
     try {
@@ -66,9 +82,18 @@ export default function App() {
 
   const findCategory = (id) => categories.find((c) => String(c.id) === String(id));
 
+  // If you save a transaction dated in another month, jump to that month so you can see it
+  const followDate = (dateStr) => {
+    const m = monthKey(dateStr);
+    if (period !== 'all' && m !== period) {
+      setPeriod(m);
+      toast(`Saved in ${monthLabel(m)}`, 'success');
+    }
+  };
+
   const checkBudgetAlert = (data) => {
     if (data.type !== 'expense' || !data.category_id) return;
-    if (monthKey(data.txn_date) !== monthKey(todayStr())) return; // only this month's spending counts
+    if (monthKey(data.txn_date) !== monthKey(todayStr())) return;
     const budget = budgets.find((b) => String(b.category_id) === String(data.category_id) && b.monthly_limit);
     if (!budget) return;
     const before = spentByCategory(transactions)[budget.category] || 0;
@@ -85,6 +110,7 @@ export default function App() {
       id: tempId, description: data.description, amount: data.amount, type: data.type,
       category: cat ? cat.name : null, category_id: cat ? cat.id : null, txn_date: data.txn_date,
     }, ...p]);
+    followDate(data.txn_date);
     checkBudgetAlert(data);
     try { await api.addTransaction(data); toast(data.type === 'income' ? 'Income added' : 'Expense added'); sync(); }
     catch (err) { setTransactions((p) => p.filter((t) => t.id !== tempId)); toast(`Could not add: ${err.message}`, 'error'); }
@@ -98,6 +124,7 @@ export default function App() {
       category: cat ? cat.name : null, category_id: cat ? cat.id : null, txn_date: data.txn_date,
     } : t)));
     setEditing(null);
+    followDate(data.txn_date);
     try { await api.updateTransaction(id, data); toast('Transaction updated'); sync(); }
     catch (err) { setTransactions(backup); toast(`Could not update: ${err.message}`, 'error'); }
   };
@@ -131,6 +158,29 @@ export default function App() {
     catch (err) { setBudgets(backup); toast(`Could not remove budget: ${err.message}`, 'error'); }
   };
 
+  const handleAddCategory = async (data) => {
+    try {
+      const created = await api.addCategory(data);
+      setCategories((p) => [...p, created].sort((a, b) => a.name.localeCompare(b.name)));
+      if (created.type === 'expense') setBudgets(await api.getBudgets()); // so it can get a budget
+      toast(`Category "${created.name}" added`);
+      return true;
+    } catch (err) { toast(err.message, 'error'); return false; }
+  };
+
+  const handleDeleteCategory = async (cat) => {
+    if (!window.confirm(`Delete "${cat.name}"?\n\nIts transactions will stay but become uncategorised, and its budget will be removed.`)) return;
+    try {
+      await api.deleteCategory(cat.id);
+      setEditing(null);
+      setCategories((p) => p.filter((c) => c.id !== cat.id));
+      setBudgets((p) => p.filter((b) => b.category_id !== cat.id));
+      setTransactions((p) => p.map((t) => (t.category_id === cat.id ? { ...t, category: null, category_id: null } : t)));
+      toast(`Category "${cat.name}" deleted`);
+      sync();
+    } catch (err) { toast(`Could not delete: ${err.message}`, 'error'); }
+  };
+
   if (locked) return <Login />;
 
   return (
@@ -148,15 +198,17 @@ export default function App() {
         {error && <div className="bg-red-50 border border-loss/30 text-loss text-sm rounded-lg px-4 py-3">Couldn't reach the server: {error}</div>}
         {loading ? <p className="text-slate-400 text-sm">Loading your data…</p> : (
           <>
+            <PeriodBar period={period} options={monthOptions} onChange={setPeriod} />
             <SummaryCards summary={summary} />
-            {summary.expense > summary.income && <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-3 animate-row-in">Heads up: your spending is higher than your income.</div>}
+            {summary.expense > summary.income && <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-3 animate-row-in">Heads up: spending is higher than income in this period.</div>}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <CategoryChart data={categoryData} />
               <TrendChart data={trendData} />
             </div>
-            <BudgetPanel budgets={budgets} transactions={transactions} onSave={handleSaveBudget} onRemove={handleRemoveBudget} />
+            <BudgetPanel budgets={budgets} transactions={transactions} month={period === 'all' ? monthKey(todayStr()) : period} onSave={handleSaveBudget} onRemove={handleRemoveBudget} />
             <TransactionForm categories={categories} onSubmit={handleSubmit} editing={editing} onCancel={() => setEditing(null)} />
-            <TransactionList transactions={transactions} onDelete={handleDelete} onEdit={handleEdit} />
+            <TransactionList transactions={visibleTxns} onDelete={handleDelete} onEdit={handleEdit} />
+            <CategoryManager categories={categories} onAdd={handleAddCategory} onDelete={handleDeleteCategory} />
           </>
         )}
       </main>

@@ -31,7 +31,7 @@ export default function TransactionList({ transactions, onDelete, onEdit }) {
             </tr>
           </thead>
           <tbody>
-            {visible.length === 0 && <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-400">{transactions.length ? 'No matches.' : 'No transactions yet. Add your first one above.'}</td></tr>}
+            {visible.length === 0 && <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-400">{transactions.length ? 'No matches.' : 'No transactions in this period.'}</td></tr>}
             {visible.map((t) => {
               const saving = String(t.id).startsWith('temp-');
               return (

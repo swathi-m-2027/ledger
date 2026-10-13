@@ -18,6 +18,30 @@ router.get('/categories', async (req, res) => {
   catch (e) { console.error(e); res.status(500).json({ error: 'Failed to fetch categories' }); }
 });
 
+// Create a custom category
+router.post('/categories', async (req, res) => {
+  const name = String(req.body.name || '').trim();
+  const { type } = req.body;
+  if (!name || name.length > 50 || !['income', 'expense'].includes(type))
+    return res.status(400).json({ error: 'A name (max 50 characters) and a valid type are required' });
+  try {
+    const r = await pool.query('INSERT INTO categories (name, type) VALUES ($1, $2) RETURNING id, name, type', [name, type]);
+    res.status(201).json(r.rows[0]);
+  } catch (e) {
+    if (e.code === '23505') return res.status(409).json({ error: `A category named "${name}" already exists` });
+    console.error(e); res.status(500).json({ error: 'Failed to create category' });
+  }
+});
+
+// Delete a category (its transactions stay, but become uncategorised; its budget is removed)
+router.delete('/categories/:id', async (req, res) => {
+  try {
+    const r = await pool.query('DELETE FROM categories WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!r.rowCount) return res.status(404).json({ error: 'Category not found' });
+    res.json({ success: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Failed to delete category' }); }
+});
+
 router.post('/', async (req, res) => {
   if (!valid(req.body)) return res.status(400).json({ error: 'description, a positive amount and a valid type are required' });
   const { description, amount, type, category_id, txn_date } = req.body;
