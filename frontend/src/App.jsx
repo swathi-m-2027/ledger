@@ -16,6 +16,18 @@ import { exportCsv } from './exportCsv';
 
 const inr = (v) => `₹${Math.round(v).toLocaleString('en-IN')}`;
 
+// One bar per category (including categories with nothing yet), plus "Uncategorised" if needed
+function buildCategoryData(categories, transactions, type) {
+  const map = {};
+  categories.filter((c) => c.type === type).forEach((c) => { map[c.name] = 0; });
+  transactions.filter((t) => t.type === type).forEach((t) => {
+    const key = t.category || 'Uncategorised';
+    map[key] = (map[key] || 0) + Number(t.amount);
+  });
+  return Object.entries(map).map(([category, total]) => ({ category, total })).sort((a, b) => b.total - a.total);
+}
+
+
 export default function App() {
   const toast = useToast();
   const [transactions, setTransactions] = useState([]);
@@ -53,12 +65,8 @@ export default function App() {
     return { income, expense, balance: income - expense };
   }, [visibleTxns]);
 
-  const categoryData = useMemo(() => {
-    const map = {};
-    visibleTxns.filter((t) => t.type === 'expense' && t.category)
-      .forEach((t) => { map[t.category] = (map[t.category] || 0) + Number(t.amount); });
-    return Object.entries(map).map(([category, total]) => ({ category, total })).sort((a, b) => b.total - a.total);
-  }, [visibleTxns]);
+  const expenseData = useMemo(() => buildCategoryData(categories, visibleTxns, 'expense'), [categories, visibleTxns]);
+  const incomeData = useMemo(() => buildCategoryData(categories, visibleTxns, 'income'), [categories, visibleTxns]);
 
   const sync = useCallback(async () => {
     try {
@@ -217,9 +225,10 @@ export default function App() {
             <SummaryCards summary={summary} />
             {summary.expense > summary.income && <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-3 animate-row-in">Heads up: spending is higher than income in this period.</div>}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <CategoryChart data={categoryData} />
-              <TrendChart data={trendData} />
+              <CategoryChart title="Spending by Category" data={expenseData} color="#4F5FEA" label="Spent" emptyText="No expense categories yet." />
+              <CategoryChart title="Income by Category" data={incomeData} color="#0F9D6B" label="Earned" emptyText="No income categories yet." />
             </div>
+            <TrendChart data={trendData} />
             <BudgetPanel budgets={budgets} transactions={transactions} month={period === 'all' ? monthKey(todayStr()) : period} onSave={handleSaveBudget} onRemove={handleRemoveBudget} />
             <TransactionForm categories={categories} onSubmit={handleSubmit} editing={editing} onCancel={() => setEditing(null)} />
             <TransactionList transactions={visibleTxns} onDelete={handleDelete} onEdit={handleEdit} onExport={handleExport} />
