@@ -1,31 +1,15 @@
 import AnimatedNumber from './AnimatedNumber';
 const fmt = (v) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Math.round(v));
 
-function Card({ label, value, tone, hint, icon }) {
+function Card({ label, value, tone, hint, icon, eyebrow }) {
   const styles = {
-    gain: { text: 'text-gain', wash: 'from-green-50 to-white', ring: 'ring-green-100', icon: 'bg-green-100 text-gain' },
-    loss: { text: 'text-loss', wash: 'from-red-50 to-white', ring: 'ring-red-100', icon: 'bg-red-100 text-loss' },
+    gain: { text: 'text-gain', wash: 'from-emerald-50 via-white to-white', border: 'border-emerald-100', icon: 'bg-emerald-100 text-gain', stripe: 'bg-gain' },
+    loss: { text: 'text-loss', wash: 'from-rose-50 via-white to-white', border: 'border-rose-100', icon: 'bg-rose-100 text-loss', stripe: 'bg-loss' },
   }[tone];
 
-  return (
-    <div className={`relative overflow-hidden bg-gradient-to-br ${styles.wash} border border-ledger rounded-2xl p-5 flex flex-col gap-3 ring-1 ${styles.ring} hover:-translate-y-0.5 hover:shadow-lg transition-all animate-card-pulse`}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-wider text-slate-500 font-semibold">{label}</span>
-        <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${styles.icon}`}>{icon}</span>
-      </div>
-      <span className={`font-mono text-2xl font-semibold tabular-nums ${styles.text}`}><AnimatedNumber value={value} formatFn={fmt} /></span>
-      <span className="text-xs text-slate-500">{hint}</span>
-      <div className={`absolute -right-8 -bottom-10 w-28 h-28 rounded-full opacity-40 ${styles.icon}`} />
-    </div>
-  );
+  return <div className={`relative overflow-hidden rounded-2xl border ${styles.border} bg-gradient-to-br ${styles.wash} p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl`}><div className={`absolute left-0 top-0 h-full w-1 ${styles.stripe}`} /><div className="flex items-start justify-between"><div><span className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">{label}</span><span className="mt-1 block text-xs text-slate-400">{eyebrow}</span></div><span className={`flex h-10 w-10 items-center justify-center rounded-xl text-base font-bold shadow-sm ${styles.icon}`}>{icon}</span></div><span className={`mt-5 block font-mono text-3xl font-semibold tracking-tight tabular-nums ${styles.text}`}><AnimatedNumber value={value} formatFn={fmt} /></span><div className="mt-3 flex items-center gap-2 text-xs text-slate-500"><span className={`h-1.5 w-1.5 rounded-full ${styles.stripe}`} />{hint}</div></div>;
 }
 
 export default function SummaryCards({ summary }) {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <Card label="Net Balance" value={summary.balance} tone={summary.balance >= 0 ? 'gain' : 'loss'} hint="Income minus expenses" icon="₹" />
-      <Card label="Total Income" value={summary.income} tone="gain" hint="All recorded income" icon="↗" />
-      <Card label="Total Expense" value={summary.expense} tone="loss" hint="All recorded spending" icon="↘" />
-    </div>
-  );
+  return <div className="grid grid-cols-1 gap-4 sm:grid-cols-3"><Card label="Net Balance" value={summary.balance} tone={summary.balance >= 0 ? 'gain' : 'loss'} eyebrow="Current position" hint="Income minus expenses" icon="₹" /><Card label="Total Income" value={summary.income} tone="gain" eyebrow="Money in" hint="All recorded income" icon="↗" /><Card label="Total Expense" value={summary.expense} tone="loss" eyebrow="Money out" hint="All recorded spending" icon="↘" /></div>;
 }
