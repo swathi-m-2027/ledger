@@ -2,6 +2,7 @@ const BASE_URL = import.meta.env.PROD ? '/api' : 'http://localhost:5000/api';
 
 export const getPassword = () => localStorage.getItem('ledger_pw') || '';
 export const setPassword = (p) => localStorage.setItem('ledger_pw', p);
+export const clearPassword = () => localStorage.removeItem('ledger_pw');
 
 async function handle(res) {
   if (res.status === 401) {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { api } from './api';
+import { api, clearPassword } from './api';
 import { useToast } from './components/Toast';
 import { spentByCategory } from './budgetUtils';
 import { monthKey, monthLabel, todayStr } from './dateUtils';
@@ -12,6 +12,7 @@ import TransactionList from './components/TransactionList';
 import CategoryManager from './components/CategoryManager';
 import PeriodBar from './components/PeriodBar';
 import Login from './components/Login';
+import { exportCsv } from './exportCsv';
 
 const inr = (v) => `₹${Math.round(v).toLocaleString('en-IN')}`;
 
@@ -181,6 +182,17 @@ export default function App() {
     } catch (err) { toast(`Could not delete: ${err.message}`, 'error'); }
   };
 
+  const handleExport = () => {
+    if (!visibleTxns.length) { toast('Nothing to export in this period', 'warning'); return; }
+    exportCsv(visibleTxns, period === 'all' ? 'all-time' : period);
+    toast('CSV downloaded');
+  };
+
+  const handleLogout = () => {
+    clearPassword();
+    setLocked(true);
+  };
+
   if (locked) return <Login />;
 
   return (
@@ -191,7 +203,10 @@ export default function App() {
             <div className="w-8 h-8 rounded-lg bg-gain flex items-center justify-center font-display font-bold text-ink">₹</div>
             <span className="font-display font-semibold text-lg tracking-tight">Ledger</span>
           </div>
-          <span className="text-sm text-slate-300 hidden sm:block">Personal Finance Analytics</span>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-slate-300 hidden sm:block">Personal Finance Analytics</span>
+            <button onClick={handleLogout} className="text-sm border border-slate-600 rounded-lg px-3 py-1.5 text-slate-200 hover:bg-slate-800 transition-colors">Log out</button>
+          </div>
         </div>
       </header>
       <main className="max-w-6xl mx-auto px-6 py-8 flex flex-col gap-6">
@@ -207,7 +222,7 @@ export default function App() {
             </div>
             <BudgetPanel budgets={budgets} transactions={transactions} month={period === 'all' ? monthKey(todayStr()) : period} onSave={handleSaveBudget} onRemove={handleRemoveBudget} />
             <TransactionForm categories={categories} onSubmit={handleSubmit} editing={editing} onCancel={() => setEditing(null)} />
-            <TransactionList transactions={visibleTxns} onDelete={handleDelete} onEdit={handleEdit} />
+            <TransactionList transactions={visibleTxns} onDelete={handleDelete} onEdit={handleEdit} onExport={handleExport} />
             <CategoryManager categories={categories} onAdd={handleAddCategory} onDelete={handleDeleteCategory} />
           </>
         )}

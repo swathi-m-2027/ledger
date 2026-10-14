@@ -3,7 +3,7 @@ import { formatDate } from '../dateUtils';
 
 const fmt = (v) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
 
-export default function TransactionList({ transactions, onDelete, onEdit }) {
+export default function TransactionList({ transactions, onDelete, onEdit, onExport }) {
   const [query, setQuery] = useState('');
   const [type, setType] = useState('all');
   const visible = useMemo(() => transactions.filter((t) => {
@@ -20,6 +20,7 @@ export default function TransactionList({ transactions, onDelete, onEdit }) {
           <select value={type} onChange={(e) => setType(e.target.value)} className="border border-ledger rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent">
             <option value="all">All</option><option value="income">Income</option><option value="expense">Expense</option>
           </select>
+          <button onClick={onExport} className="border border-ledger rounded-lg px-3 py-1.5 text-sm text-ink hover:bg-paper transition-colors whitespace-nowrap">Export CSV</button>
         </div>
       </div>
       <div className="overflow-x-auto">
